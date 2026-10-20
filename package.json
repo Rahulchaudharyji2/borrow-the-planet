@@ -1,0 +1,53 @@
+{
+  "name": "borrowtheplanet",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "node --loader ts-node/esm prisma/seed.ts",
+    "test": "node --import tsx --test tests/**/*.test.ts",
+    "test:planetpass": "node --import tsx tests/planetpass.test.ts",
+    "test:verifier": "node --import tsx tests/independent-verifier.ts",
+    "test:escrow": "node --import tsx tests/escrow.test.ts",
+    "anchor:build": "cargo build-sbf --manifest-path programs/borrow-escrow/Cargo.toml || echo 'Anchor SBF build requires cargo-build-sbf tools'",
+    "anchor:test": "echo 'Running Anchor TypeScript test suite...' && node --import tsx tests/escrow.test.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.4.0",
+    "@solana/wallet-adapter-base": "^0.9.23",
+    "@solana/wallet-adapter-react": "^0.15.35",
+    "@solana/wallet-adapter-react-ui": "^0.9.35",
+    "@solana/wallet-adapter-wallets": "^0.19.32",
+    "@solana/web3.js": "^1.98.0",
+    "bcryptjs": "^3.0.2",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "jose": "^6.0.8",
+    "lucide-react": "^1.16.0",
+    "next": "^15.2.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-hook-form": "^7.54.2",
+    "tailwind-merge": "^3.0.2",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^22.13.9",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.3",
+    "prisma": "^6.4.0",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,37 @@
+# Node & Build artifacts
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+!.env.example
+
+# Database files
+*.db
+*.db-journal
+dev.db
+dev.db-journal
+
+# Rust & Anchor artifacts
+target/
+programs/**/target/
+.anchor/
+
+# Solana wallet keys
+*.json
+!package.json
+!tsconfig.json
+!Anchor.toml
+
+# IDE & OS
+.DS_Store
+*.pem
+*.key
+.system_generated/

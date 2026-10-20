@@ -1,0 +1,340 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  REVIEWER
+  ADMIN
+}
+
+enum ListingCategory {
+  ELECTRONICS
+  CAMERAS
+  OUTDOOR
+  TOOLS
+  BOOKS
+  CAMPUS_ESSENTIALS
+  OTHER
+}
+
+enum ItemCondition {
+  LIKE_NEW
+  EXCELLENT
+  GOOD
+  FAIR
+}
+
+enum ListingStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  ARCHIVED
+}
+
+enum BookingStatus {
+  PENDING
+  APPROVED
+  ESCROW_FUNDED
+  HANDED_OVER
+  RETURN_PENDING
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum CredentialStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+  EXPIRED
+}
+
+enum DisputeCategory {
+  DAMAGED_ITEM
+  LATE_RETURN
+  NEVER_RETURNED
+  MISSING_ACCESSORIES
+  INACCURATE_LISTING
+  OTHER
+}
+
+enum DisputeStatus {
+  REPORTED
+  AWAITING_RESPONSE
+  UNDER_REVIEW
+  SUBSTANTIATED
+  NOT_SUBSTANTIATED
+  RESOLVED
+  APPEALED
+  CORRECTED
+}
+
+model User {
+  id                   String                 @id @default(uuid())
+  email                String                 @unique
+  passwordHash         String
+  name                 String
+  bio                  String?
+  avatar               String?
+  campus               String                 @default("Campus Hub")
+  role                 String                 @default("USER") // USER, REVIEWER, ADMIN
+  solanaWalletAddress  String?                @unique
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  listings             Listing[]
+  borrowedBookings     Booking[]              @relation("BorrowerBookings")
+  lentBookings         Booking[]              @relation("LenderBookings")
+  credentials          PlanetPassCredential[]
+  presentations        PlanetPassPresentation[]
+  reportedDisputes     Dispute[]              @relation("ReporterDisputes")
+  respondentDisputes   Dispute[]              @relation("RespondentDisputes")
+  reviewedDisputes     Dispute[]              @relation("ReviewerDisputes")
+  disputeMessages      DisputeMessage[]
+  auditLogs            AuditLog[]
+}
+
+model Listing {
+  id                  String          @id @default(uuid())
+  title               String
+  description         String
+  category            String          @default("CAMPUS_ESSENTIALS") // ListingCategory
+  condition           String          @default("GOOD") // ItemCondition
+  dailyRateCents      Int             // Integer minor units (e.g. 1500 = $15.00)
+  dailyRateLamports   Int             @default(50000000) // 0.05 SOL in base lamports
+  depositCents        Int             // Refundable security deposit
+  depositLamports     Int             @default(150000000) // 0.15 SOL
+  currency            String          @default("SOL")
+  minDays             Int             @default(1)
+  maxDays             Int             @default(30)
+  pickupArea          String          // General pickup neighborhood / campus zone (safe, no exact private address)
+  rules               String?
+  accessories         String?
+  status              String          @default("PUBLISHED") // ListingStatus
+  lenderId            String
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  lender              User            @relation(fields: [lenderId], references: [id], onDelete: Cascade)
+  photos              ListingPhoto[]
+  bookings            Booking[]
+
+  @@index([category])
+  @@index([status])
+  @@index([lenderId])
+}
+
+model ListingPhoto {
+  id        String   @id @default(uuid())
+  listingId String
+  url       String
+  caption   String?
+  sortOrder Int      @default(0)
+
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+}
+
+model Booking {
+  id                    String            @id @default(uuid())
+  listingId             String
+  borrowerId            String
+  lenderId              String
+  startDate             DateTime
+  endDate               DateTime
+  durationDays          Int
+  rentalSubtotalCents   Int
+  depositCents          Int
+  platformFeeCents      Int
+  totalDueCents         Int
+  rentalSubtotalLamports Int              @default(0)
+  depositLamports       Int              @default(0)
+  platformFeeLamports   Int              @default(0)
+  totalDueLamports      Int              @default(0)
+  paymentMode           String            @default("DEMO_SOLANA_ESCROW")
+  status                String            @default("PENDING") // BookingStatus
+  escrowAccount         String?
+  escrowTxSignature     String?
+  releaseTxSignature    String?
+  cancellationReason    String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  listing               Listing           @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  borrower              User              @relation("BorrowerBookings", fields: [borrowerId], references: [id])
+  lender                User              @relation("LenderBookings", fields: [lenderId], references: [id])
+  handoverRecord        HandoverRecord?
+  returnRecord          ReturnRecord?
+  disputes              Dispute[]
+  events                BookingStateEvent[]
+
+  @@index([listingId])
+  @@index([borrowerId])
+  @@index([lenderId])
+  @@index([status])
+}
+
+model BookingStateEvent {
+  id         String   @id @default(uuid())
+  bookingId  String
+  fromStatus String
+  toStatus   String
+  note       String?
+  actorId    String
+  createdAt  DateTime @default(now())
+
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+}
+
+model HandoverRecord {
+  id                 String    @id @default(uuid())
+  bookingId          String    @unique
+  lenderConfirmed    Boolean   @default(false)
+  borrowerConfirmed  Boolean   @default(false)
+  conditionNotes     String?
+  checklistAnswers   String    @default("{}") // JSON string of condition checklist
+  photoUrls          String    @default("[]") // JSON string of photo URLs taken at handover
+  lenderSignedAt     DateTime?
+  borrowerSignedAt   DateTime?
+  disagreementFlag   Boolean   @default(false)
+  disagreementNote   String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  booking            Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+model ReturnRecord {
+  id                         String    @id @default(uuid())
+  bookingId                  String    @unique
+  lenderConfirmed            Boolean   @default(false)
+  borrowerConfirmed          Boolean   @default(false)
+  conditionComparisonNotes   String?
+  checklistAnswers           String    @default("{}") // JSON checklist comparison
+  returnPhotoUrls            String    @default("[]") // JSON photo URLs
+  lenderSignedAt             DateTime?
+  borrowerSignedAt           DateTime?
+  disagreementFlag           Boolean   @default(false)
+  disagreementNote           String?
+  depositReleaseApproved     Boolean   @default(false)
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+
+  booking                    Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+model PlanetPassCredential {
+  id                         String                  @id @default(uuid())
+  userId                     String
+  issuerId                   String                  // e.g. "did:planetpass:campus-collective-authority-01"
+  issuerName                 String                  // e.g. "Campus Trust Network & Beast Coder"
+  credentialSubjectId        String                  // Subject identifier
+  schemaVersion              String                  @default("planetpass-v1.0")
+  issuanceDate               DateTime                @default(now())
+  expirationDate             DateTime?
+  historyCoverageStart       DateTime
+  historyCoverageEnd         DateTime
+  rentalsCompleted           Int                     @default(0)
+  onTimeReturnRatePercent    Float                   @default(100.0)
+  itemsShared                Int                     @default(0)
+  disputeFreeRatePercent     Float                   @default(100.0)
+  status                     String                  @default("ACTIVE") // CredentialStatus
+  revocationReason           String?
+  signatureHex               String                  // Cryptographic signature produced with issuer key
+  rawCredentialJson          String                  // Full tamper-evident payload
+  createdAt                  DateTime                @default(now())
+  updatedAt                  DateTime                @updatedAt
+
+  user                       User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  presentations              PlanetPassPresentation[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model PlanetPassPresentation {
+  id              String               @id @default(uuid())
+  credentialId    String
+  userId          String
+  shareToken      String               @unique // Secure lookup token for /verify/[credentialId]?token=...
+  disclosedClaims String               // JSON array of consented claim keys (selective disclosure)
+  purpose         String?              // e.g. "Rental application for Camera gear on PeerGear"
+  expiresAt       DateTime
+  accessCount     Int                  @default(0)
+  lastAccessedAt  DateTime?
+  createdAt       DateTime             @default(now())
+
+  credential      PlanetPassCredential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([credentialId])
+  @@index([shareToken])
+}
+
+model Dispute {
+  id                     String           @id @default(uuid())
+  bookingId              String
+  reporterId             String
+  respondentId           String
+  category               String           @default("DAMAGED_ITEM") // DisputeCategory
+  description            String
+  evidenceUrls           String           @default("[]") // JSON array of evidence URLs
+  status                 String           @default("REPORTED") // DisputeStatus
+  reviewerId             String?
+  resolutionNotes        String?
+  depositDeductionCents  Int?
+  depositDeductionLamports Int?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  booking                Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  reporter               User             @relation("ReporterDisputes", fields: [reporterId], references: [id])
+  respondent             User             @relation("RespondentDisputes", fields: [respondentId], references: [id])
+  reviewer               User?            @relation("ReviewerDisputes", fields: [reviewerId], references: [id])
+  messages               DisputeMessage[]
+
+  @@index([bookingId])
+  @@index([reporterId])
+  @@index([respondentId])
+  @@index([status])
+}
+
+model DisputeMessage {
+  id             String    @id @default(uuid())
+  disputeId      String
+  senderId       String
+  message        String
+  attachmentUrls String    @default("[]") // JSON
+  isReviewerNote Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+
+  dispute        Dispute   @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  sender         User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([disputeId])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   String   @default("{}") // JSON
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([action])
+  @@index([entityType])
+}
